@@ -1,0 +1,8 @@
+# Files and directories created by pub and build tools.
+.dart_tool/
+build/
+pubspec.lock
+
+# Environment and local configuration files.
+.env
+*.env
