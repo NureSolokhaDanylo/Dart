@@ -1,6 +1,7 @@
 /// Бібліотека для функціональної обробки каталогу книг (Лабораторна робота №1).
 ///
-/// Містить оголошення типів записів (Records) та вхідний набір CSV-даних.
+/// Містить оголошення типів записів (Records), вхідний набір CSV-даних,
+/// функції безпечного розбору, валідації діапазонів, регулярних виразів та дат.
 /// Використання ключового слова `class` у цій версії заборонено.
 library;
 
@@ -46,6 +47,15 @@ typedef ValidationResult = ({
   bool isValid,
 });
 
+/// Розібрані сегменти номера ISBN-13 з іменованих груп регулярного виразу.
+typedef IsbnSegments = ({
+  String prefix,
+  String group,
+  String publisher,
+  String title,
+  String check,
+});
+
 /// Агрегована статистика для однієї категорії (жанру) книг.
 typedef GenreStats = ({
   String genre,
@@ -60,6 +70,16 @@ const String csvFieldDelimiter = ';';
 
 /// Очікувана кількість полів у кожному CSV-рядку.
 const int expectedCsvFieldCount = 9;
+
+/// Регулярний вираз для перевірки та розбору номера ISBN-13 з іменованими групами:
+/// - `prefix` — префікс GS1 (`978` або `979`);
+/// - `group` — ідентифікатор мовної або національної групи;
+/// - `publisher` — код видавництва;
+/// - `title` — ідентифікатор конкретного видання;
+/// - `check` — контрольна цифра.
+final RegExp isbn13RegExp = RegExp(
+  r'^(?<prefix>97[89])-(?<group>\d{1,5})-(?<publisher>\d{1,7})-(?<title>\d{1,6})-(?<check>\d)$',
+);
 
 /// Константний вхідний набір даних у CSV-подібному форматі (18 записів).
 ///
@@ -96,3 +116,273 @@ const List<String> rawBooksCsv = <String>[
   // Запис із некоректним форматом ISBN-13
   'BK-VAL2;Книга з хибним ISBN;Тестовий Автор;Програмування;2022;320;4.2;123-INVALID-ISBN;2025-10-05',
 ];
+
+/// Розбирає один CSV-рядок [line] у запис книги [BookRecord] разом з описом помилки.
+///
+/// Не використовує `try/catch` для очікуваних помилок формату — натомість
+/// застосовує `split`, `int.tryParse`, `double.tryParse` та `DateTime.tryParse`.
+ParseResult parseLineWithDiagnostics(
+  String line, {
+  int lineNumber = 0,
+  String delimiter = csvFieldDelimiter,
+}) {
+  final trimmedLine = line.trim();
+  if (trimmedLine.isEmpty) {
+    return (
+      lineNumber: lineNumber,
+      rawLine: line,
+      book: null,
+      error: 'Рядок порожній',
+    );
+  }
+
+  final parts = trimmedLine
+      .split(delimiter)
+      .map((part) => part.trim())
+      .toList();
+  if (parts.length != expectedCsvFieldCount) {
+    return (
+      lineNumber: lineNumber,
+      rawLine: line,
+      book: null,
+      error:
+          'Некоректна кількість полів: очікувалося $expectedCsvFieldCount, отримано ${parts.length}',
+    );
+  }
+
+  final id = parts[0];
+  final title = parts[1];
+  final author = parts[2];
+  final genre = parts[3];
+  final yearStr = parts[4];
+  final pagesStr = parts[5];
+  final ratingStr = parts[6];
+  final isbn = parts[7];
+  final dateStr = parts[8];
+
+  if (id.isEmpty ||
+      title.isEmpty ||
+      author.isEmpty ||
+      genre.isEmpty ||
+      isbn.isEmpty) {
+    return (
+      lineNumber: lineNumber,
+      rawLine: line,
+      book: null,
+      error: 'Одне з обов’язкових текстових полів порожнє',
+    );
+  }
+
+  final year = int.tryParse(yearStr);
+  if (year == null) {
+    return (
+      lineNumber: lineNumber,
+      rawLine: line,
+      book: null,
+      error: 'Некоректне ціле число в полі року видання: "$yearStr"',
+    );
+  }
+
+  final pages = int.tryParse(pagesStr);
+  if (pages == null) {
+    return (
+      lineNumber: lineNumber,
+      rawLine: line,
+      book: null,
+      error: 'Некоректне ціле число в полі кількості сторінок: "$pagesStr"',
+    );
+  }
+
+  final rating = double.tryParse(ratingStr);
+  if (rating == null) {
+    return (
+      lineNumber: lineNumber,
+      rawLine: line,
+      book: null,
+      error: 'Некоректне дробове число в полі рейтингу: "$ratingStr"',
+    );
+  }
+
+  final datePattern = RegExp(r'^\d{4}-\d{2}-\d{2}$');
+  final parsedDate = datePattern.hasMatch(dateStr)
+      ? DateTime.tryParse(dateStr)
+      : null;
+  // DateTime.tryParse може нормалізувати неіснуючі дати на кшталт 2025-19-99,
+  // тому додатково звіряємо компоненти розібраної дати з вхідним рядком.
+  final dateParts = dateStr.split('-');
+  final expectedYear = dateParts.length == 3
+      ? int.tryParse(dateParts[0])
+      : null;
+  final expectedMonth = dateParts.length == 3
+      ? int.tryParse(dateParts[1])
+      : null;
+  final expectedDay = dateParts.length == 3 ? int.tryParse(dateParts[2]) : null;
+
+  final isStrictValidDate =
+      parsedDate != null &&
+      parsedDate.year == expectedYear &&
+      parsedDate.month == expectedMonth &&
+      parsedDate.day == expectedDay;
+
+  if (!isStrictValidDate) {
+    return (
+      lineNumber: lineNumber,
+      rawLine: line,
+      book: null,
+      error: 'Некоректна дата додавання (очікується YYYY-MM-DD): "$dateStr"',
+    );
+  }
+
+  return (
+    lineNumber: lineNumber,
+    rawLine: line,
+    book: (
+      id: id,
+      title: title,
+      author: author,
+      genre: genre,
+      year: year,
+      pages: pages,
+      rating: rating,
+      isbn: isbn,
+      addedDate: parsedDate,
+    ),
+    error: null,
+  );
+}
+
+/// Розбирає рядок [line] у запис предметної області [BookRecord].
+///
+/// Повертає `null`, якщо рядок не відповідає очікуваному CSV-формату.
+BookRecord? parseLine(String line, {String delimiter = csvFieldDelimiter}) {
+  return parseLineWithDiagnostics(line, delimiter: delimiter).book;
+}
+
+/// Розбирає список вхідних CSV-рядків [lines] у список діагностичних результатів [ParseResult].
+List<ParseResult> parseCsvDataset(
+  List<String> lines, {
+  String delimiter = csvFieldDelimiter,
+}) {
+  return lines.indexed
+      .map(
+        (entry) => parseLineWithDiagnostics(
+          entry.$2,
+          lineNumber: entry.$1 + 1,
+          delimiter: delimiter,
+        ),
+      )
+      .toList();
+}
+
+/// Перевіряє відповідність рядка [isbn] формату ISBN-13 за допомогою [isbn13RegExp].
+bool isValidIsbn13(String isbn) => isbn13RegExp.hasMatch(isbn);
+
+/// Витягує іменовані групи з номера [isbn], якщо він відповідає формату ISBN-13.
+IsbnSegments? extractIsbnSegments(String isbn) {
+  final match = isbn13RegExp.firstMatch(isbn);
+  if (match == null) {
+    return null;
+  }
+  final prefix = match.namedGroup('prefix');
+  final group = match.namedGroup('group');
+  final publisher = match.namedGroup('publisher');
+  final title = match.namedGroup('title');
+  final check = match.namedGroup('check');
+
+  if (prefix == null ||
+      group == null ||
+      publisher == null ||
+      title == null ||
+      check == null) {
+    return null;
+  }
+
+  return (
+    prefix: prefix,
+    group: group,
+    publisher: publisher,
+    title: title,
+    check: check,
+  );
+}
+
+/// Маскує код видавництва та видання в номері [isbn] за допомогою `replaceAllMapped`
+/// та іменованих груп регулярного виразу [isbn13RegExp].
+///
+/// Приклад: `978-966-038-840-6` -> `978-966-***-***-6`.
+String maskIsbn(String isbn, {String maskChar = '*'}) {
+  return isbn.replaceAllMapped(isbn13RegExp, (match) {
+    if (match is! RegExpMatch) {
+      return match.group(0) ?? isbn;
+    }
+    final prefix = match.namedGroup('prefix') ?? '';
+    final group = match.namedGroup('group') ?? '';
+    final publisher = match.namedGroup('publisher') ?? '';
+    final title = match.namedGroup('title') ?? '';
+    final check = match.namedGroup('check') ?? '';
+    final maskedPublisher = maskChar * publisher.length;
+    final maskedTitle = maskChar * title.length;
+    return '$prefix-$group-$maskedPublisher-$maskedTitle-$check';
+  });
+}
+
+/// Перевіряє діапазони значень та формат полів запису [book].
+///
+/// Повертає список текстових описів виявлених порушень (порожній список, якщо запис валідний).
+List<String> validateBook(
+  BookRecord book, {
+  int minYear = 1450,
+  int maxYear = 2026,
+  int minPages = 1,
+  int maxPages = 5000,
+  double minRating = 0.0,
+  double maxRating = 5.0,
+}) {
+  final violations = <String>[];
+
+  if (book.year < minYear || book.year > maxYear) {
+    violations.add(
+      'Рік видання (${book.year}) виходить за межі допустимого діапазону [$minYear..$maxYear]',
+    );
+  }
+
+  if (book.pages < minPages || book.pages > maxPages) {
+    violations.add(
+      'Кількість сторінок (${book.pages}) виходить за межі діапазону [$minPages..$maxPages]',
+    );
+  }
+
+  if (book.rating < minRating || book.rating > maxRating) {
+    violations.add(
+      'Рейтинг (${book.rating}) виходить за межі діапазону [$minRating..$maxRating]',
+    );
+  }
+
+  if (!isValidIsbn13(book.isbn)) {
+    violations.add(
+      'Номер ISBN ("${book.isbn}") не відповідає формату ISBN-13 (978/979-група-видавець-видання-контроль)',
+    );
+  }
+
+  return violations;
+}
+
+/// Виконує валідацію списку розібраних книг [books] і повертає результати перевірки.
+List<ValidationResult> validateBooks(
+  List<BookRecord> books, {
+  int minYear = 1450,
+  int maxYear = 2026,
+}) {
+  return books.map((book) {
+    final violations = validateBook(book, minYear: minYear, maxYear: maxYear);
+    return (book: book, violations: violations, isValid: violations.isEmpty);
+  }).toList();
+}
+
+/// Обчислює вік запису книги [book] у повних днях відносно [referenceDate]
+/// за допомогою `DateTime.difference` та `Duration`.
+int calculateRecordAgeInDays(BookRecord book, {DateTime? referenceDate}) {
+  final effectiveReference = referenceDate ?? DateTime.now();
+  final Duration difference = effectiveReference.difference(book.addedDate);
+  return difference.inDays;
+}
