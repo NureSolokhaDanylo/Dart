@@ -65,6 +65,45 @@ typedef GenreStats = ({
   BookRecord? topRatedBook,
 });
 
+/// Скорочене представлення книги після трансформації у конвеєрі обробки.
+typedef BookSummary = ({
+  String id,
+  String title,
+  String author,
+  double rating,
+  int pages,
+  int year,
+});
+
+/// Запис із функціями замикання-лічильника оброблених елементів.
+typedef RecordCounter = ({
+  int Function() increment,
+  int Function() current,
+  void Function() reset,
+});
+
+/// Результат агрегації кількості сторінок через конвеєр `where -> map -> fold`.
+typedef PagesAggregation = ({
+  int bookCount,
+  int totalPages,
+  double averagePages,
+});
+
+/// Результат агрегації рейтингів через конвеєр `where -> map -> fold`.
+typedef RatingAggregation = ({
+  int bookCount,
+  double totalRating,
+  double averageRating,
+});
+
+/// Результат пошуку книги з мінімальним та максимальним обсягом/рейтингом.
+typedef ExtremesAggregation = ({
+  BookSummary? minRated,
+  BookSummary? maxRated,
+  BookSummary? shortestBook,
+  BookSummary? longestBook,
+});
+
 /// Роздільник полів у вхідному CSV-наборі даних.
 const String csvFieldDelimiter = ';';
 
@@ -385,4 +424,183 @@ int calculateRecordAgeInDays(BookRecord book, {DateTime? referenceDate}) {
   final effectiveReference = referenceDate ?? DateTime.now();
   final Duration difference = effectiveReference.difference(book.addedDate);
   return difference.inDays;
+}
+
+/// Створює замикання-лічильник оброблених записів із початковим значенням [initialValue].
+///
+/// Внутрішні анонімні функції захоплюють локальну змінну `count` та початкове
+/// значення [initialValue] із лексичного оточення функції [createRecordCounter].
+/// Змінна `count` зберігає свій стан між викликами [RecordCounter.increment],
+/// [RecordCounter.current] та [RecordCounter.reset].
+RecordCounter createRecordCounter([int initialValue = 0]) {
+  var count = initialValue;
+  return (
+    increment: () {
+      count += 1;
+      return count;
+    },
+    current: () => count,
+    reset: () {
+      count = initialValue;
+    },
+  );
+}
+
+/// Фабрика предикатів (замикання), яка створює функцію фільтрації книг за заданими критеріями.
+///
+/// Повернена функція захоплює параметри [genre], [minRating], [minYear], [maxYear]
+/// та [minPages] із лексичної області видимості [createBookFilter].
+bool Function(BookRecord) createBookFilter({
+  String? genre,
+  double minRating = 0.0,
+  int? minYear,
+  int? maxYear,
+  int? minPages,
+}) {
+  final normalizedGenre = genre?.trim().toLowerCase();
+  return (BookRecord book) {
+    if (normalizedGenre != null &&
+        normalizedGenre.isNotEmpty &&
+        book.genre.toLowerCase() != normalizedGenre) {
+      return false;
+    }
+    if (book.rating < minRating) {
+      return false;
+    }
+    if (minYear != null && book.year < minYear) {
+      return false;
+    }
+    if (maxYear != null && book.year > maxYear) {
+      return false;
+    }
+    if (minPages != null && book.pages < minPages) {
+      return false;
+    }
+    return true;
+  };
+}
+
+/// Шукає книгу за її унікальним ідентифікатором [id] за допомогою стандартної
+/// властивості `firstOrNull` (Dart 3+) без підключення `package:collection`.
+BookRecord? findBookById(List<BookRecord> books, String id) {
+  final normalizedId = id.trim().toLowerCase();
+  return books
+      .where((book) => book.id.toLowerCase() == normalizedId)
+      .firstOrNull;
+}
+
+/// Шукає першу книгу, назва якої містить підрядок [titleQuery], за допомогою
+/// методу `firstWhere` із параметром `orElse`, що повертає [fallback].
+BookRecord findBookByTitleOrDefault(
+  List<BookRecord> books,
+  String titleQuery,
+  BookRecord fallback,
+) {
+  final normalizedQuery = titleQuery.trim().toLowerCase();
+  return books.firstWhere(
+    (book) => book.title.toLowerCase().contains(normalizedQuery),
+    orElse: () => fallback,
+  );
+}
+
+/// Перетворює повний запис книги [book] на скорочене представлення [BookSummary].
+BookSummary toBookSummary(BookRecord book) {
+  return (
+    id: book.id,
+    title: book.title,
+    author: book.author,
+    rating: book.rating,
+    pages: book.pages,
+    year: book.year,
+  );
+}
+
+/// Конвеєр №1 (`where -> map -> fold`): обчислює загальну та середню кількість
+/// сторінок для книг, що задовольняють умову фільтрації за [minRating] та [genre].
+PagesAggregation aggregatePagesPipeline(
+  List<BookRecord> books, {
+  double minRating = 0.0,
+  String? genre,
+}) {
+  final predicate = createBookFilter(genre: genre, minRating: minRating);
+  final folded = books
+      .where(predicate)
+      .map((book) => book.pages)
+      .fold<({int count, int sum})>((
+        count: 0,
+        sum: 0,
+      ), (acc, pages) => (count: acc.count + 1, sum: acc.sum + pages));
+
+  final average = folded.count == 0 ? 0.0 : folded.sum / folded.count;
+  return (
+    bookCount: folded.count,
+    totalPages: folded.sum,
+    averagePages: average,
+  );
+}
+
+/// Конвеєр №2 (`where -> map -> fold`): обчислює сумарний та середній рейтинг
+/// для книг, виданих починаючи з [fromYear] року.
+RatingAggregation aggregateRatingsPipeline(
+  List<BookRecord> books, {
+  int? fromYear,
+}) {
+  final predicate = createBookFilter(minYear: fromYear);
+  final folded = books
+      .where(predicate)
+      .map((book) => (title: book.title, rating: book.rating))
+      .fold<({int count, double sum})>((
+        count: 0,
+        sum: 0.0,
+      ), (acc, item) => (count: acc.count + 1, sum: acc.sum + item.rating));
+
+  final average = folded.count == 0 ? 0.0 : folded.sum / folded.count;
+  return (
+    bookCount: folded.count,
+    totalRating: folded.sum,
+    averageRating: average,
+  );
+}
+
+/// Конвеєр №3 (`where -> map -> fold`): перетворює відфільтровані записи на
+/// [BookSummary] та знаходить мінімальні і максимальні книги за рейтингом і сторінками.
+ExtremesAggregation findExtremesPipeline(
+  List<BookRecord> books, {
+  double minRating = 0.0,
+}) {
+  final predicate = createBookFilter(minRating: minRating);
+  return books.where(predicate).map(toBookSummary).fold<ExtremesAggregation>(
+    (minRated: null, maxRated: null, shortestBook: null, longestBook: null),
+    (acc, current) {
+      final prevMinRated = acc.minRated;
+      final minRated =
+          prevMinRated == null || current.rating < prevMinRated.rating
+          ? current
+          : prevMinRated;
+
+      final prevMaxRated = acc.maxRated;
+      final maxRated =
+          prevMaxRated == null || current.rating > prevMaxRated.rating
+          ? current
+          : prevMaxRated;
+
+      final prevShortest = acc.shortestBook;
+      final shortest =
+          prevShortest == null || current.pages < prevShortest.pages
+          ? current
+          : prevShortest;
+
+      final prevLongest = acc.longestBook;
+      final longest = prevLongest == null || current.pages > prevLongest.pages
+          ? current
+          : prevLongest;
+
+      return (
+        minRated: minRated,
+        maxRated: maxRated,
+        shortestBook: shortest,
+        longestBook: longest,
+      );
+    },
+  );
 }

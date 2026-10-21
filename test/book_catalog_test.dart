@@ -23,4 +23,26 @@ void main() {
       expect(maskIsbn(parsed.isbn), equals('978-966-***-***-6'));
     }
   });
+
+  test('Замикання та конвеєри where-map-fold обчислюють коректні агрегати', () {
+    final counter = createRecordCounter(0);
+    expect(counter.increment(), equals(1));
+    expect(counter.increment(), equals(2));
+    expect(counter.current(), equals(2));
+    counter.reset();
+    expect(counter.current(), equals(0));
+
+    final validBooks = parseCsvDataset(rawBooksCsv)
+        .map((r) => r.book)
+        .whereType<BookRecord>()
+        .where((b) => validateBook(b).isEmpty)
+        .toList();
+
+    final pagesAgg = aggregatePagesPipeline(validBooks, genre: 'Класика');
+    expect(pagesAgg.bookCount, equals(3));
+    expect(pagesAgg.totalPages, equals(832));
+
+    final found = findBookById(validBooks, 'BK-007');
+    expect(found?.title, equals('Дюна'));
+  });
 }
