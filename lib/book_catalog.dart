@@ -604,3 +604,107 @@ ExtremesAggregation findExtremesPipeline(
     },
   );
 }
+
+/// Групує список записів [books] у словник `Map<String, List<BookRecord>>` за жанром книги.
+Map<String, List<BookRecord>> groupBooksByGenre(List<BookRecord> books) {
+  return books.fold<Map<String, List<BookRecord>>>(
+    <String, List<BookRecord>>{},
+    (grouped, book) {
+      final genreList = grouped.putIfAbsent(book.genre, () => <BookRecord>[]);
+      genreList.add(book);
+      return grouped;
+    },
+  );
+}
+
+/// Обчислює агреговану статистику [GenreStats] для кожної групи книг у [groupedBooks].
+Map<String, GenreStats> calculateStatsByGenre(
+  Map<String, List<BookRecord>> groupedBooks,
+) {
+  return groupedBooks.map((genre, booksInGenre) {
+    final pagesAgg = aggregatePagesPipeline(booksInGenre);
+    final ratingAgg = aggregateRatingsPipeline(booksInGenre);
+    final topBook = booksInGenre.fold<BookRecord?>(null, (best, current) {
+      if (best == null || current.rating > best.rating) {
+        return current;
+      }
+      return best;
+    });
+
+    return MapEntry(genre, (
+      genre: genre,
+      count: booksInGenre.length,
+      totalPages: pagesAgg.totalPages,
+      averageRating: ratingAgg.averageRating,
+      topRatedBook: topBook,
+    ));
+  });
+}
+
+/// Сортує список книг [books] за першим критерієм — рейтингом (а при рівності — за роком видання).
+///
+/// Напрям сортування керується іменованим параметром [ascending]
+/// (`false` — за спаданням, `true` — за зростанням).
+List<BookRecord> sortBooksByRating(
+  List<BookRecord> books, {
+  bool ascending = false,
+}) {
+  final sorted = List<BookRecord>.of(books);
+  sorted.sort((a, b) {
+    final primaryComparison = a.rating.compareTo(b.rating);
+    final comparison = primaryComparison != 0
+        ? primaryComparison
+        : a.year.compareTo(b.year);
+    return ascending ? comparison : -comparison;
+  });
+  return sorted;
+}
+
+/// Сортує список книг [books] за другим критерієм — роком видання (а при рівності — за кількістю сторінок).
+///
+/// Напрям сортування керується іменованим параметром [ascending]
+/// (`true` — за зростанням, `false` — за спаданням).
+List<BookRecord> sortBooksByYear(
+  List<BookRecord> books, {
+  bool ascending = true,
+}) {
+  final sorted = List<BookRecord>.of(books);
+  sorted.sort((a, b) {
+    final primaryComparison = a.year.compareTo(b.year);
+    final comparison = primaryComparison != 0
+        ? primaryComparison
+        : a.pages.compareTo(b.pages);
+    return ascending ? comparison : -comparison;
+  });
+  return sorted;
+}
+
+/// Універсальна функція сортування списку [books] за обраним критерієм [criterion]
+/// (`'rating'`, `'year'`, `'pages'`, `'title'`) та напрямом [ascending].
+List<BookRecord> sortBooks(
+  List<BookRecord> books, {
+  String criterion = 'rating',
+  bool ascending = false,
+}) {
+  switch (criterion.trim().toLowerCase()) {
+    case 'year':
+      return sortBooksByYear(books, ascending: ascending);
+    case 'pages':
+      final sorted = List<BookRecord>.of(books);
+      sorted.sort((a, b) {
+        final cmp = a.pages.compareTo(b.pages);
+        return ascending ? cmp : -cmp;
+      });
+      return sorted;
+    case 'title':
+      final sorted = List<BookRecord>.of(books);
+      sorted.sort((a, b) {
+        final cmp = a.title.compareTo(b.title);
+        return ascending ? cmp : -cmp;
+      });
+      return sorted;
+    case 'rating':
+    default:
+      return sortBooksByRating(books, ascending: ascending);
+  }
+}

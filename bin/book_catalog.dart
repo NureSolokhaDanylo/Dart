@@ -2,37 +2,29 @@ import 'package:book_catalog/book_catalog.dart';
 
 /// Точка входу консольної програми каталогу книг.
 void main(List<String> arguments) {
-  final counter = createRecordCounter();
   final parseResults = parseCsvDataset(rawBooksCsv);
-  final parsedBooks = parseResults
+  final validBooks = parseResults
       .map((result) => result.book)
       .whereType<BookRecord>()
+      .where((book) => validateBook(book).isEmpty)
       .toList();
-  final validationResults = validateBooks(parsedBooks);
-  final validBooks = validationResults.where((item) => item.isValid).map((
-    item,
-  ) {
-    counter.increment();
-    return item.book;
-  }).toList();
 
-  final pagesStats = aggregatePagesPipeline(validBooks, minRating: 4.7);
-  final ratingStats = aggregateRatingsPipeline(validBooks, fromYear: 2000);
-  final extremes = findExtremesPipeline(validBooks);
+  final grouped = groupBooksByGenre(validBooks);
+  final statsByGenre = calculateStatsByGenre(grouped);
 
-  print(
-    'Оброблено валідних записів (лічильник-замикання): ${counter.current()}',
-  );
-  print(
-    'Сторінки (рейтинг >= 4.7): усього ${pagesStats.totalPages}, '
-    'середнє ${pagesStats.averagePages.toStringAsFixed(1)}',
-  );
-  print(
-    'Середній рейтинг книг із 2000 року: '
-    '${ratingStats.averageRating.toStringAsFixed(2)}',
-  );
-  print(
-    'Найдовша книга: ${extremes.longestBook?.title} '
-    '(${extremes.longestBook?.pages} стор.)',
-  );
+  print('Групування за жанрами (${statsByGenre.length} категорії):');
+  for (final entry in statsByGenre.entries) {
+    final stat = entry.value;
+    print(
+      ' - ${stat.genre}: ${stat.count} кн., '
+      'середній рейтинг ${stat.averageRating.toStringAsFixed(2)}, '
+      'усього ${stat.totalPages} стор.',
+    );
+  }
+
+  final topByRating = sortBooksByRating(validBooks, ascending: false).take(3);
+  print('\nТоп-3 за рейтингом:');
+  for (final book in topByRating) {
+    print(' * ${book.title} (${book.year}) — ${book.rating}');
+  }
 }

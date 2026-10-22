@@ -45,4 +45,34 @@ void main() {
     final found = findBookById(validBooks, 'BK-007');
     expect(found?.title, equals('Дюна'));
   });
+
+  test(
+    'Групування за жанром та сортування за двома критеріями працюють коректно',
+    () {
+      final validBooks = parseCsvDataset(rawBooksCsv)
+          .map((r) => r.book)
+          .whereType<BookRecord>()
+          .where((b) => validateBook(b).isEmpty)
+          .toList();
+
+      final grouped = groupBooksByGenre(validBooks);
+      expect(
+        grouped.keys,
+        containsAll(<String>[
+          'Класика',
+          'Програмування',
+          'Фантастика',
+          'Історія',
+        ]),
+      );
+
+      final stats = calculateStatsByGenre(grouped);
+      expect(stats['Історія']?.count, equals(3));
+
+      final sortedAsc = sortBooksByYear(validBooks, ascending: true);
+      final sortedDesc = sortBooksByYear(validBooks, ascending: false);
+      expect(sortedAsc.first.year, lessThanOrEqualTo(sortedAsc.last.year));
+      expect(sortedDesc.first.year, greaterThanOrEqualTo(sortedDesc.last.year));
+    },
+  );
 }
