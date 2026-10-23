@@ -708,3 +708,197 @@ List<BookRecord> sortBooks(
       return sortBooksByRating(books, ascending: ascending);
   }
 }
+
+/// Формує текстовий звіт за списком записів [items] із використанням [StringBuffer].
+///
+/// Підтримує іменовані параметри зі значеннями за замовчуванням:
+/// - [topCount] — максимальна кількість записів у вибірці топу;
+/// - [ascending] — напрям сортування (`false` — за спаданням, `true` — за зростанням);
+/// - [separator] — роздільник полів у рядках таблиці;
+/// - [sortBy] — критерій сортування (`'rating'`, `'year'`, `'pages'`, `'title'`);
+/// - [maskSensitiveIsbn] — чи маскувати код видавця та видання в номері ISBN;
+/// - [referenceDate] — опорна дата для розрахунку віку запису в днях.
+String buildReport(
+  List<BookRecord> items, {
+  int topCount = 5,
+  bool ascending = false,
+  String separator = ' | ',
+  String sortBy = 'rating',
+  bool maskSensitiveIsbn = true,
+  DateTime? referenceDate,
+}) {
+  final buffer = StringBuffer();
+  final effectiveDate = referenceDate ?? DateTime(2026, 10, 22);
+
+  buffer.writeln(
+    '============================================================',
+  );
+  buffer.writeln(
+    '               ЗВІТ ПО КАТАЛОГУ КНИГ БІБЛІОТЕКИ             ',
+  );
+  buffer.writeln(
+    '============================================================',
+  );
+  buffer.writeln('Загальна кількість валідних записів: ${items.length}');
+
+  if (items.isEmpty) {
+    buffer.writeln('Список записів порожній.');
+    return buffer.toString();
+  }
+
+  final pagesAgg = aggregatePagesPipeline(items);
+  final ratingsAgg = aggregateRatingsPipeline(items);
+  final extremes = findExtremesPipeline(items);
+
+  buffer.writeln('');
+  buffer.writeln(
+    '--- 1. Загальні показники (конвеєри where -> map -> fold) ---',
+  );
+  buffer.writeln(
+    'Сумарна кількість сторінок: ${pagesAgg.totalPages} '
+    '(середнє: ${pagesAgg.averagePages.toStringAsFixed(1)} стор.)',
+  );
+  buffer.writeln(
+    'Середній рейтинг каталогу: ${ratingsAgg.averageRating.toStringAsFixed(2)}',
+  );
+
+  final highest = extremes.maxRated;
+  final lowest = extremes.minRated;
+  final longest = extremes.longestBook;
+  final shortest = extremes.shortestBook;
+
+  if (highest != null && lowest != null) {
+    buffer.writeln(
+      'Найвищий рейтинг: "${highest.title}" (${highest.rating.toStringAsFixed(1)})',
+    );
+    buffer.writeln(
+      'Найнижчий рейтинг: "${lowest.title}" (${lowest.rating.toStringAsFixed(1)})',
+    );
+  }
+  if (longest != null && shortest != null) {
+    buffer.writeln(
+      'Найбільший обсяг: "${longest.title}" (${longest.pages} стор.)',
+    );
+    buffer.writeln(
+      'Найменший обсяг: "${shortest.title}" (${shortest.pages} стор.)',
+    );
+  }
+
+  buffer.writeln('');
+  buffer.writeln('--- 2. Групування за жанрами ---');
+  final grouped = groupBooksByGenre(items);
+  final genreStats = calculateStatsByGenre(grouped);
+  for (final entry in genreStats.entries) {
+    final stat = entry.value;
+    final bestTitle = stat.topRatedBook?.title ?? 'немає';
+    buffer.writeln(
+      '[${stat.genre}] Кількість: ${stat.count}$separator'
+      'Сторінок: ${stat.totalPages}$separator'
+      'Сер. оцінка: ${stat.averageRating.toStringAsFixed(2)}$separator'
+      'Лідер: "$bestTitle"',
+    );
+  }
+
+  final sorted = sortBooks(items, criterion: sortBy, ascending: ascending);
+  final limited = sorted.take(topCount < 0 ? 0 : topCount).toList();
+  final directionLabel = ascending ? 'за зростанням' : 'за спаданням';
+
+  buffer.writeln('');
+  buffer.writeln(
+    '--- 3. Вибірка записів (Топ-${limited.length}, критерій: $sortBy, $directionLabel) ---',
+  );
+  for (final book in limited) {
+    final formattedIsbn = maskSensitiveIsbn ? maskIsbn(book.isbn) : book.isbn;
+    final ageDays = calculateRecordAgeInDays(
+      book,
+      referenceDate: effectiveDate,
+    );
+    buffer.writeln(
+      [
+        book.id,
+        '"${book.title}"',
+        book.author,
+        book.genre,
+        '${book.year} р.',
+        '${book.pages} стор.',
+        '★ ${book.rating.toStringAsFixed(1)}',
+        'ISBN: $formattedIsbn',
+        'Вік у каталозі: $ageDays дн.',
+      ].join(separator),
+    );
+  }
+
+  return buffer.toString();
+}
+
+/// Формує повний звіт включно з протоколом розбору CSV-рядків [rawLines],
+/// перевіркою діапазонів значень та лічильником оброблених записів на базі замикання.
+String buildFullDiagnosticReport(
+  List<String> rawLines, {
+  int topCount = 5,
+  bool ascending = false,
+  String separator = ' | ',
+  DateTime? referenceDate,
+}) {
+  final buffer = StringBuffer();
+  final counter = createRecordCounter(0);
+  final parseResults = parseCsvDataset(rawLines);
+
+  buffer.writeln(
+    '============================================================',
+  );
+  buffer.writeln(
+    '          ПРОТОКОЛ РОЗБОРУ ТА ВАЛІДАЦІЇ CSV-ДАНИХ           ',
+  );
+  buffer.writeln(
+    '============================================================',
+  );
+  buffer.writeln('Всього вхідних рядків: ${rawLines.length}');
+
+  final parseErrors = parseResults.where((r) => r.error != null).toList();
+  final parsedBooks = parseResults
+      .map((r) => r.book)
+      .whereType<BookRecord>()
+      .toList();
+
+  buffer.writeln('Успішно розібрано рядків: ${parsedBooks.length}');
+  buffer.writeln('Помилок синтаксичного розбору: ${parseErrors.length}');
+
+  for (final failed in parseErrors) {
+    buffer.writeln('  [Рядок #${failed.lineNumber}] Помилка: ${failed.error}');
+  }
+
+  final validations = validateBooks(parsedBooks);
+  final invalidRecords = validations.where((v) => !v.isValid).toList();
+  final validBooks = validations.where((v) => v.isValid).map((v) {
+    counter.increment();
+    return v.book;
+  }).toList();
+
+  buffer.writeln('');
+  buffer.writeln(
+    'Порушень діапазонів та формату полів: ${invalidRecords.length}',
+  );
+  for (final invalid in invalidRecords) {
+    buffer.writeln(
+      '  [${invalid.book.id} "${invalid.book.title}"]: '
+      '${invalid.violations.join("; ")}',
+    );
+  }
+
+  buffer.writeln(
+    'Кількість валідних записів (підраховано замиканням): ${counter.current()}',
+  );
+  buffer.writeln('');
+  buffer.write(
+    buildReport(
+      validBooks,
+      topCount: topCount,
+      ascending: ascending,
+      separator: separator,
+      referenceDate: referenceDate,
+    ),
+  );
+
+  return buffer.toString();
+}

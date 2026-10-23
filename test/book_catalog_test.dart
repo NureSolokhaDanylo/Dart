@@ -12,6 +12,7 @@ void main() {
       final results = parseCsvDataset(rawBooksCsv);
       final failed = results.where((r) => r.book == null).toList();
       expect(failed.length, greaterThanOrEqualTo(3));
+      expect(parseLine('некоректний;рядок'), isNull);
     },
   );
 
@@ -21,6 +22,10 @@ void main() {
     if (parsed != null) {
       expect(validateBook(parsed), isEmpty);
       expect(maskIsbn(parsed.isbn), equals('978-966-***-***-6'));
+      final segments = extractIsbnSegments(parsed.isbn);
+      expect(segments?.prefix, equals('978'));
+      expect(segments?.group, equals('966'));
+      expect(segments?.check, equals('6'));
     }
   });
 
@@ -42,12 +47,29 @@ void main() {
     expect(pagesAgg.bookCount, equals(3));
     expect(pagesAgg.totalPages, equals(832));
 
+    final ratingsAgg = aggregateRatingsPipeline(validBooks, fromYear: 2000);
+    expect(ratingsAgg.bookCount, equals(4));
+    expect(ratingsAgg.averageRating, closeTo(4.825, 0.01));
+
+    final extremes = findExtremesPipeline(validBooks);
+    expect(extremes.longestBook?.title, equals('Дюна'));
+    expect(extremes.shortestBook?.title, equals('Захар Беркут'));
+
     final found = findBookById(validBooks, 'BK-007');
     expect(found?.title, equals('Дюна'));
+    expect(findBookById(validBooks, 'UNKNOWN'), isNull);
+
+    final fallback = validBooks.first;
+    final foundOrFallback = findBookByTitleOrDefault(
+      validBooks,
+      'Відсутня книга',
+      fallback,
+    );
+    expect(foundOrFallback.id, equals(fallback.id));
   });
 
   test(
-    'Групування за жанром та сортування за двома критеріями працюють коректно',
+    'Групування за жанром, сортування та арифметика дат працюють коректно',
     () {
       final validBooks = parseCsvDataset(rawBooksCsv)
           .map((r) => r.book)
@@ -73,6 +95,25 @@ void main() {
       final sortedDesc = sortBooksByYear(validBooks, ascending: false);
       expect(sortedAsc.first.year, lessThanOrEqualTo(sortedAsc.last.year));
       expect(sortedDesc.first.year, greaterThanOrEqualTo(sortedDesc.last.year));
+
+      final firstBook = validBooks.first;
+      final ageDays = calculateRecordAgeInDays(
+        firstBook,
+        referenceDate: DateTime(2025, 1, 25),
+      );
+      expect(ageDays, equals(10));
     },
   );
+
+  test('Формування звіту через StringBuffer повертає непорожній текст', () {
+    final report = buildFullDiagnosticReport(
+      rawBooksCsv,
+      topCount: 5,
+      ascending: false,
+      separator: ' | ',
+      referenceDate: DateTime(2026, 10, 22),
+    );
+    expect(report, contains('ЗВІТ ПО КАТАЛОГУ КНИГ БІБЛІОТЕКИ'));
+    expect(report, contains('978-966-***-***-6'));
+  });
 }
