@@ -1,11 +1,14 @@
 /// Об’єктно-орієнтована модель предметної області «Каталог книг» (Лабораторна робота №2).
 ///
 /// Містить інтерфейс [Identifiable], розширене перелічення [BookGenre]
-/// та незмінний клас сутності [Book] із генеративним, іменованим і фабричними
-/// конструкторами, обчислюваними гетерами та перевизначенням `==` і `hashCode`.
+/// та незмінний клас сутності [Book], переписаний на первинний константний
+/// конструктор Dart 3.13 (`class const Book({...})`) разом з іменованим
+/// конструктором [Book.fromCsv], фабричними конструкторами та перевизначенням
+/// `==` і `hashCode`.
 library;
 
 import 'book_catalog.dart' as lab1;
+import 'book_hierarchy.dart';
 
 /// Базовий інтерфейс для всіх сутностей предметної області з унікальним ідентифікатором.
 abstract interface class Identifiable {
@@ -88,41 +91,57 @@ enum BookGenre {
   }
 }
 
-/// Незмінний клас-сутність книги в каталозі бібліотеки (Пункти 1, 2, 4).
-class Book implements Identifiable {
-  /// Генеративний константний конструктор створення екземпляра [Book].
-  const Book({
-    required this.id,
-    required this.title,
-    required this.author,
-    required this.genre,
-    required this.year,
-    required this.pages,
-    required this.rating,
-    required this.isbn,
-    required this.addedDate,
-  });
-
+/// Незмінний клас-сутність книги в каталозі бібліотеки (Пункти 1, 2, 3, 4).
+///
+/// Оголошений за допомогою первинного константного конструктора Dart 3.13 (`class const`),
+/// що об’єднує оголошення полів `final` та заголовка основного конструктора.
+class const Book({
+  @override required final String id,
+  required final String title,
+  required final String author,
+  required final BookGenre genre,
+  required final int year,
+  required final int pages,
+  required final double rating,
+  required final String isbn,
+  required final DateTime addedDate,
+  final BookFormat format = const PrintedFormat(
+    isHardcover: true,
+    paperDensityGrams: 80,
+  ),
+}) implements Identifiable {
   /// Іменований конструктор, який створює об’єкт [Book] із рядка CSV [line] (Пункт 2).
-  Book.fromCsv(String line, {String delimiter = lab1.csvFieldDelimiter})
-    : this._fromParsedRecord(
-        lab1.parseLine(line, delimiter: delimiter),
-        rawLine: line,
-      );
+  Book.fromCsv(
+    String line, {
+    String delimiter = lab1.csvFieldDelimiter,
+    BookFormat? customFormat,
+  }) : this._fromParsedRecord(
+         lab1.parseLine(line, delimiter: delimiter),
+         rawLine: line,
+         customFormat: customFormat,
+       );
 
   /// Приватний делегуючий конструктор для ініціалізації полів із розібраного запису.
-  Book._fromParsedRecord(lab1.BookRecord? record, {required String rawLine})
-    : id = record?.id ?? 'INVALID',
-      title = record?.title ?? 'Некоректний CSV-рядок: ${rawLine.trim()}',
-      author = record?.author ?? 'Невідомий',
-      genre =
-          (record != null ? BookGenre.tryParse(record.genre) : null) ??
-          BookGenre.classics,
-      year = record?.year ?? 1900,
-      pages = record?.pages ?? 1,
-      rating = record?.rating ?? 0.0,
-      isbn = record?.isbn ?? '000-000-000-000-0',
-      addedDate = record?.addedDate ?? DateTime.utc(1970, 1, 1);
+  Book._fromParsedRecord(
+    lab1.BookRecord? record, {
+    required String rawLine,
+    BookFormat? customFormat,
+  }) : this(
+         id: record?.id ?? 'INVALID',
+         title: record?.title ?? 'Некоректний CSV-рядок: ${rawLine.trim()}',
+         author: record?.author ?? 'Невідомий',
+         genre:
+             (record != null ? BookGenre.tryParse(record.genre) : null) ??
+             BookGenre.classics,
+         year: record?.year ?? 1900,
+         pages: record?.pages ?? 1,
+         rating: record?.rating ?? 0.0,
+         isbn: record?.isbn ?? '000-000-000-000-0',
+         addedDate: record?.addedDate ?? DateTime.utc(1970, 1, 1),
+         format:
+             customFormat ??
+             _inferDefaultFormat(record?.id ?? 'INVALID', record?.pages ?? 1),
+       );
 
   /// Внутрішній кеш створених екземплярів [Book] за ключем [id].
   static final Map<String, Book> _instanceCache = <String, Book>{};
@@ -149,6 +168,7 @@ class Book implements Identifiable {
     required double rating,
     required String isbn,
     required DateTime addedDate,
+    BookFormat? format,
   }) {
     final normalizedId = id.trim();
     if (normalizedId.isEmpty) {
@@ -169,6 +189,7 @@ class Book implements Identifiable {
       rating: rating,
       isbn: isbn,
       addedDate: addedDate,
+      format: format ?? _inferDefaultFormat(normalizedId, pages),
     );
     _instanceCache[normalizedId] = created;
     return created;
@@ -178,8 +199,9 @@ class Book implements Identifiable {
   factory Book.fromCsvCached(
     String line, {
     String delimiter = lab1.csvFieldDelimiter,
+    BookFormat? format,
   }) {
-    final parsed = tryParseCsv(line, delimiter: delimiter);
+    final parsed = tryParseCsv(line, delimiter: delimiter, format: format);
     if (parsed == null) {
       return Book.fallback();
     }
@@ -214,6 +236,7 @@ class Book implements Identifiable {
   static Book? tryParseCsv(
     String line, {
     String delimiter = lab1.csvFieldDelimiter,
+    BookFormat? format,
   }) {
     final record = lab1.parseLine(line, delimiter: delimiter);
     if (record == null) {
@@ -237,35 +260,34 @@ class Book implements Identifiable {
       rating: record.rating,
       isbn: record.isbn,
       addedDate: record.addedDate,
+      format: format ?? _inferDefaultFormat(record.id, record.pages),
     );
   }
 
-  @override
-  final String id;
-
-  /// Назва книги.
-  final String title;
-
-  /// Автор книги.
-  final String author;
-
-  /// Категорія жанру книги (перелічення [BookGenre]).
-  final BookGenre genre;
-
-  /// Рік видання.
-  final int year;
-
-  /// Кількість сторінок.
-  final int pages;
-
-  /// Середня оцінка читачів за шкалою `0.0..5.0`.
-  final double rating;
-
-  /// Міжнародний номер книги у форматі ISBN-13.
-  final String isbn;
-
-  /// Дата внесення запису до каталогу.
-  final DateTime addedDate;
+  static BookFormat _inferDefaultFormat(String id, int pages) {
+    if (id.endsWith('4') || id.endsWith('5')) {
+      return const EBookFormat(
+        fileExtension: 'EPUB',
+        fileSizeMb: 4.8,
+        hasDrmProtection: false,
+      );
+    }
+    if (id.endsWith('8') || id.endsWith('9')) {
+      return const AudioBookFormat(
+        durationMinutes: 540,
+        narrator: 'Олексій Богданович',
+        bitrateKbps: 192,
+      );
+    }
+    if (id.endsWith('1') || id.endsWith('7')) {
+      return const CollectorFormat(
+        printRunLimit: 500,
+        isSignedByAuthor: true,
+        slipcaseMaterial: 'Тканинний футляр із тисненням',
+      );
+    }
+    return PrintedFormat(isHardcover: pages >= 300, paperDensityGrams: 80);
+  }
 
   /// Гетер обчислюваної властивості: чи належить видання до сучасної літератури (з 2000 р.).
   bool get isModernEdition => year >= 2000;
@@ -319,6 +341,7 @@ class Book implements Identifiable {
   String toString() {
     return 'Book(id: $id, title: "$title", author: $author, '
         'genre: ${genre.displayName}, year: $year, pages: $pages, '
-        'rating: ${rating.toStringAsFixed(1)}, isbn: $maskedIsbn)';
+        'rating: ${rating.toStringAsFixed(1)}, isbn: $maskedIsbn, '
+        'format: ${format.formatName})';
   }
 }
