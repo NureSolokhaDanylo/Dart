@@ -9,9 +9,13 @@ library;
 
 import 'book_catalog.dart' as lab1;
 import 'book_hierarchy.dart';
+import 'mixins_and_extensions.dart';
 
-/// Базовий інтерфейс для всіх сутностей предметної області з унікальним ідентифікатором.
-abstract interface class Identifiable {
+/// Базовий абстрактний клас-інтерфейс для всіх сутностей предметної області з унікальним ідентифікатором.
+abstract class Identifiable {
+  /// Базовий константний конструктор ідентифікованої сутності.
+  const Identifiable();
+
   /// Унікальний рядковий ідентифікатор сутності.
   String get id;
 }
@@ -109,7 +113,7 @@ class const Book({
     isHardcover: true,
     paperDensityGrams: 80,
   ),
-}) implements Identifiable {
+}) extends Identifiable with CatalogExportable {
   /// Іменований конструктор, який створює об’єкт [Book] із рядка CSV [line] (Пункт 2).
   Book.fromCsv(
     String line, {
@@ -300,6 +304,10 @@ class const Book({
 
   /// Гетер обчислюваної властивості: короткий бібліографічний шифр книги.
   String get bibliographicCode => '${genre.deweyCode}/$id-$year';
+
+  @override
+  String get exportSummaryTitle =>
+      'Книга "$title" ($author, ${genre.displayName}, $year р.)';
 
   /// Обчислює вік запису книги в каталозі у днях відносно [referenceDate].
   int ageInDays([DateTime? referenceDate]) {
