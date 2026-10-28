@@ -5,6 +5,11 @@
 /// Використання ключового слова `class` у цій версії заборонено.
 library;
 
+export 'book_hierarchy.dart';
+export 'mixins_and_extensions.dart';
+export 'oop_models.dart';
+export 'repository_and_patterns.dart';
+
 /// Запис, що представляє окрему книгу в каталозі.
 ///
 /// Поля запису:
