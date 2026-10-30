@@ -229,3 +229,126 @@ Future<TimingComparisonResult> measureSequentialVsConcurrent(
     ],
   );
 }
+
+/// Результат порівняння обробки помилок через `Future.wait` та розширення `.wait` (Пункт 5).
+typedef GroupErrorComparisonResult = ({
+  String futureWaitCaughtError,
+  int futureWaitRecoveredCount,
+  List<String?> parallelWaitValuesTitles,
+  List<String?> parallelWaitErrorMessages,
+});
+
+/// Порівнює обробку помилки однієї з трьох одночасних операцій:
+/// 1) через класичний [Future.wait];
+/// 2) через розширення `Iterable<Future<T>>.wait`, яке кидає [ParallelWaitError] (Пункт 5).
+Future<GroupErrorComparisonResult> compareGroupErrorHandling(
+  AsyncRepository<Book> repository, {
+  String firstValidId = 'BK-001',
+  String failingId = 'BK-004',
+  String thirdValidId = 'BK-007',
+  Duration operationDelay = const Duration(milliseconds: 80),
+}) async {
+  // Частина 1: Класичний Future.wait
+  var futureWaitErrorText = '';
+  var futureWaitRecovered = 0;
+
+  try {
+    final results = await Future.wait<Book>(<Future<Book>>[
+      repository.loadOrThrow(firstValidId, customDelay: operationDelay),
+      repository.loadOrThrow(
+        failingId,
+        customDelay: operationDelay,
+        simulateFailure: true,
+      ),
+      repository.loadOrThrow(thirdValidId, customDelay: operationDelay),
+    ]);
+    futureWaitRecovered = results.length;
+  } on CatalogAsyncException catch (error) {
+    futureWaitErrorText = error.toString();
+    // При винятку у Future.wait успішні результати 1-ї та 3-ї операцій втрачаються.
+    futureWaitRecovered = 0;
+  }
+
+  // Частина 2: Розширення .wait на списку Future з перехопленням ParallelWaitError
+  var recoveredTitles = <String?>[];
+  var errorDescriptions = <String?>[];
+
+  try {
+    final results = await <Future<Book>>[
+      repository.loadOrThrow(firstValidId, customDelay: operationDelay),
+      repository.loadOrThrow(
+        failingId,
+        customDelay: operationDelay,
+        simulateFailure: true,
+      ),
+      repository.loadOrThrow(thirdValidId, customDelay: operationDelay),
+    ].wait;
+    recoveredTitles = results.map((b) => b.title).toList();
+  } on ParallelWaitError<List<Book?>, List<AsyncError?>> catch (parallelError) {
+    recoveredTitles = parallelError.values.map((book) => book?.title).toList();
+    errorDescriptions = parallelError.errors
+        .map((asyncErr) => asyncErr?.error.toString())
+        .toList();
+  }
+
+  return (
+    futureWaitCaughtError: futureWaitErrorText,
+    futureWaitRecoveredCount: futureWaitRecovered,
+    parallelWaitValuesTitles: recoveredTitles,
+    parallelWaitErrorMessages: errorDescriptions,
+  );
+}
+
+/// Результат демонстрації неспійманої асинхронної помилки без `await` (Пункт 6).
+typedef UncaughtAsyncDemoResult = ({
+  bool caughtBySynchronousTryCatch,
+  bool caughtByZoneHandler,
+  String zoneCaughtMessage,
+});
+
+/// Відтворює ситуацію, коли виклик асинхронної функції з помилкою без `await`
+/// оминає синхронний блок `try / catch`, і перехоплює її на рівні ізольованої зони
+/// `runZonedGuarded`, щоб продемонструвати причину без аварійного падіння процесу (Пункт 6).
+Future<UncaughtAsyncDemoResult> demonstrateUncaughtAsyncError(
+  AsyncRepository<Book> repository, {
+  Duration delay = const Duration(milliseconds: 40),
+}) async {
+  var caughtBySyncTry = false;
+  var caughtByZone = false;
+  var zoneMessage = '';
+  final zoneCompletion = Completer<void>();
+
+  runZonedGuarded(
+    () {
+      try {
+        // Навмисно запускаємо асинхронну операцію без await усередині синхронного try/catch.
+        // Використовуємо unawaited, щоб показати саме поведінку під час виконання.
+        unawaited(
+          repository.loadOrThrow(
+            'BK-UNCAUGHT',
+            customDelay: delay,
+            simulateFailure: true,
+          ),
+        );
+      } catch (syncError) {
+        // Цей блок ніколи не виконається, бо синхронний виклик лише створює об'єкт Future
+        // і миттєво виходить із блоку try до того, як таймер Future.delayed спрацює в Event Loop.
+        caughtBySyncTry = true;
+      }
+    },
+    (Object error, StackTrace stackTrace) {
+      caughtByZone = true;
+      zoneMessage = error.toString();
+      if (!zoneCompletion.isCompleted) {
+        zoneCompletion.complete();
+      }
+    },
+  );
+
+  await zoneCompletion.future;
+  return (
+    caughtBySynchronousTryCatch: caughtBySyncTry,
+    caughtByZoneHandler: caughtByZone,
+    zoneCaughtMessage: zoneMessage,
+  );
+}
