@@ -5,7 +5,10 @@
 /// Використання ключового слова `class` у цій версії заборонено.
 library;
 
+export 'async_repository.dart';
 export 'book_hierarchy.dart';
+export 'isolate_worker.dart';
+export 'stream_processor.dart';
 export 'mixins_and_extensions.dart';
 export 'oop_models.dart';
 export 'repository_and_patterns.dart';

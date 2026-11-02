@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:book_catalog/book_catalog.dart';
 import 'package:test/test.dart';
 
@@ -191,5 +193,167 @@ void main() {
       final oopReport = buildOopCatalogReport(rawBooksCsv);
       expect(oopReport, contains('ЗВІТ ЛАБОРАТОРНОЇ РОБОТИ №2'));
     });
+  });
+
+  group('Лабораторна робота №3: Асинхронність, потоки та ізоляти', () {
+    var seedBooks = <Book>[];
+    var asyncRepo = AsyncRepository<Book>();
+
+    setUp(() {
+      final (:repository, rejectedLines: _, cacheHits: _) =
+          importBooksToRepository(rawBooksCsv);
+      seedBooks = repository.all;
+      asyncRepo = AsyncRepository<Book>(
+        readDelay: const Duration(milliseconds: 15),
+        writeDelay: const Duration(milliseconds: 15),
+        streamInterval: const Duration(milliseconds: 10),
+        initialItems: seedBooks.take(3),
+      );
+    });
+
+    test('1. AsyncRepository виконує завантаження, збереження та видалення через Future', () async {
+      await expectLater(
+        asyncRepo.load('BK-001'),
+        completion(isA<Book>().having((b) => b.title, 'title', 'Тигролови')),
+      );
+
+      final newBook = seedBooks[3];
+      await asyncRepo.save(newBook);
+      await expectLater(
+        asyncRepo.load(newBook.id),
+        completion(equals(newBook)),
+      );
+
+      await expectLater(asyncRepo.delete('BK-001'), completion(isTrue));
+      await expectLater(asyncRepo.load('BK-001'), completion(isNull));
+    });
+
+    test('2. AsyncRepository.loadOrThrow генерує виняток CatalogAsyncException при помилці', () async {
+      await expectLater(
+        asyncRepo.loadOrThrow('BK-NOT-FOUND'),
+        throwsA(
+          isA<CatalogAsyncException>().having(
+            (e) => e.operationId,
+            'operationId',
+            'BK-NOT-FOUND',
+          ),
+        ),
+      );
+
+      await expectLater(
+        asyncRepo.loadOrThrow('BK-001', simulateFailure: true),
+        throwsA(isA<CatalogAsyncException>()),
+      );
+    });
+
+    test(
+      '3. Одночасне виконання через Future.wait швидше за послідовні await',
+      () async {
+        final timing = await measureSequentialVsConcurrent(asyncRepo, <String>[
+          'BK-001',
+          'BK-002',
+          'BK-003',
+        ], operationDelay: const Duration(milliseconds: 60));
+        expect(timing.sequentialElapsedMs, greaterThanOrEqualTo(150));
+        expect(
+          timing.concurrentElapsedMs,
+          lessThan(timing.sequentialElapsedMs),
+        );
+        expect(timing.loadedBooks.whereType<Book>().length, equals(3));
+      },
+    );
+
+    test('4. ParallelWaitError зберігає успішні значення та помилки окремо на відміну від Future.wait', () async {
+      final comparison = await compareGroupErrorHandling(
+        asyncRepo,
+        firstValidId: 'BK-001',
+        failingId: 'BK-002',
+        thirdValidId: 'BK-003',
+        operationDelay: const Duration(milliseconds: 15),
+      );
+      expect(comparison.futureWaitRecoveredCount, equals(0));
+      expect(comparison.futureWaitCaughtError, contains('BK-002'));
+      expect(
+        comparison.parallelWaitValuesTitles,
+        equals(<String?>['Тигролови', null, 'Захар Беркут']),
+      );
+      expect(comparison.parallelWaitErrorMessages[0], isNull);
+      expect(comparison.parallelWaitErrorMessages[1], contains('BK-002'));
+      expect(comparison.parallelWaitErrorMessages[2], isNull);
+    });
+
+    test('5. Генератор async* watchAll видає книги у суворо визначеному порядку (emitsInOrder)', () async {
+      final idStream = asyncRepo.watchAll().map((book) => book.id);
+      await expectLater(
+        idStream,
+        emitsInOrder(<Object>['BK-001', 'BK-002', 'BK-003', emitsDone]),
+      );
+    });
+
+    test('6. StreamController буферизує 3 події до підписки, а конвеєр трансформує потік', () async {
+      final bufferedResult = await demonstrateBufferedControllerAndListen(
+        seedBooks,
+      );
+      expect(bufferedResult.receivedEvents.length, equals(3));
+      expect(bufferedResult.subscriptionExplicitlyCancelled, isTrue);
+
+      final controller = StreamController<CatalogEvent>();
+      final now = DateTime.utc(2026, 10, 16);
+      for (final book in seedBooks.take(5)) {
+        controller.add(BookAddedEvent(book: book, timestamp: now));
+      }
+      unawaited(controller.close());
+
+      final pipelineStream = buildEventTransformationPipeline(
+        controller.stream,
+        minRating: 4.9,
+        maxEvents: 2,
+      );
+
+      await expectLater(
+        pipelineStream,
+        emitsInOrder(<Object>[
+          contains('Тигролови'),
+          contains('Прагматичний програміст'),
+          emitsDone,
+        ]),
+      );
+    });
+
+    test('7. Потік з помилкою посередині та повторна підписка на одноразовий Stream', () async {
+      final midErr = await compareMidStreamErrorBehavior(seedBooks);
+      expect(midErr.awaitForReceivedIds, equals(<String>['BK-001', 'BK-002']));
+      expect(
+        midErr.listenReceivedIds,
+        equals(<String>['BK-001', 'BK-002', 'BK-003']),
+      );
+
+      final broadcastDemo = await demonstrateSingleVsBroadcastStream(seedBooks);
+      expect(
+        broadcastDemo.singleSubscriptionSecondListenError,
+        contains('Stream has already been listened to'),
+      );
+      expect(
+        broadcastDemo.broadcastFirstListenerIds,
+        equals(broadcastDemo.broadcastSecondListenerIds),
+      );
+    });
+
+    test(
+      '8. Isolate.run виконує важке обчислення та ізолює глобальну змінну',
+      () async {
+        final bench = await benchmarkHeavyIsolateComputation(
+          seedBooks,
+          syntheticCount: 20000,
+        );
+        expect(bench.computationResult.processedEditions, equals(20000));
+        expect(bench.computationResult.rollingHashSignature, greaterThan(0));
+
+        final mutation = await demonstrateIsolateGlobalVariableMutation();
+        expect(mutation.mainValueBeforeIsolate, equals(10));
+        expect(mutation.valueInsideWorkerIsolate, equals(500));
+        expect(mutation.mainValueAfterIsolate, equals(10));
+      },
+    );
   });
 }

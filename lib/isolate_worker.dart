@@ -45,7 +45,7 @@ typedef IsolateGlobalMutationResult = ({
 /// та перевірку простих дільників контрольної суми (Пункт 14).
 HeavyArchiveComputationResult computeHeavyCatalogSignatureSync(
   List<Book> seedBooks, {
-  int syntheticCount = 180000,
+  int syntheticCount = 600000,
 }) {
   if (seedBooks.isEmpty) {
     return (
@@ -67,9 +67,9 @@ HeavyArchiveComputationResult computeHeavyCatalogSignatureSync(
     rollingHash = ((rollingHash ^ editionCode) * 0x01000193) & 0x7fffffff;
     weightedSum += book.rating * ((i % 5) + 1) * 0.0001;
 
-    // Додаткове навантаження CPU: перевірка числа на простоту для кожного 40-го індексу
-    if (i % 40 == 0) {
-      final candidate = 10007 + (editionCode.abs() % 25000);
+    // Додаткове навантаження CPU: перевірка великого числа на простоту для кожного 3-го індексу
+    if (i % 3 == 0) {
+      final candidate = 1000003 + (editionCode.abs() % 4000000);
       if (_isPrimeNumber(candidate)) {
         primeCount += 1;
       }
@@ -104,7 +104,7 @@ bool _isPrimeNumber(int n) {
 /// вимірюючи час за допомогою [Stopwatch] (Пункт 14).
 Future<IsolateBenchmarkResult> benchmarkHeavyIsolateComputation(
   List<Book> seedBooks, {
-  int syntheticCount = 180000,
+  int syntheticCount = 600000,
 }) async {
   // 1. Синхронне виконання у головному ізоляті (блокує Event Loop)
   final syncWatch = Stopwatch()..start();
@@ -188,7 +188,7 @@ demonstrateIsolateGlobalVariableMutation() async {
 Future<String> buildLab3AsyncReport(
   List<String> rawCsvLines, {
   Duration benchmarkOperationDelay = const Duration(milliseconds: 500),
-  int isolateSyntheticCount = 180000,
+  int isolateSyntheticCount = 600000,
 }) async {
   final buffer = StringBuffer();
   final (:repository, rejectedLines: _, cacheHits: _) = importBooksToRepository(
