@@ -1,4 +1,4 @@
-/// Об’єктно-орієнтована модель предметної області «Каталог книг» (Лабораторна робота №2).
+﻿/// Об’єктно-орієнтована модель предметної області «Каталог книг» (Лабораторна робота №2).
 ///
 /// Містить інтерфейс [Identifiable], розширене перелічення [BookGenre]
 /// та незмінний клас сутності [Book], переписаний на первинний константний
@@ -7,7 +7,7 @@
 /// `==` і `hashCode`.
 library;
 
-import 'book_catalog.dart' as lab1;
+import 'lab1_functional.dart' as lab1;
 import 'book_hierarchy.dart';
 import 'mixins_and_extensions.dart';
 
@@ -344,6 +344,99 @@ class const Book({
     isbn,
     addedDate,
   );
+
+  /// Фабричний конструктор десеріалізації об’єкта [Book] із JSON-словника [json]
+  /// вручну з явними приведеннями типів та перевіркою обов’язкових полів (Пункт 9).
+  ///
+  /// Викидає [FormatException], якщо типи полів некоректні або відсутні обов’язкові ключі.
+  factory Book.fromJson(Map<String, Object?> json) {
+    final rawId = json['id'];
+    final rawTitle = json['title'];
+    final rawAuthor = json['author'];
+    final rawGenre = json['genre'];
+    final rawYear = json['year'];
+    final rawPages = json['pages'];
+    final rawRating = json['rating'];
+    final rawIsbn = json['isbn'];
+    final rawAddedDate = json['addedDate'];
+
+    if (rawId is! String ||
+        rawTitle is! String ||
+        rawAuthor is! String ||
+        rawGenre is! String ||
+        rawYear is! num ||
+        rawPages is! num ||
+        rawRating is! num ||
+        rawIsbn is! String) {
+      throw const FormatException(
+        'Некоректна структура JSON для Book: відсутні або невірні типи обов’язкових полів.',
+      );
+    }
+
+    final parsedGenre = BookGenre.tryParse(rawGenre);
+    if (parsedGenre == null) {
+      throw FormatException('Невідомий жанр книги в JSON: "$rawGenre"');
+    }
+
+    final parsedDate = rawAddedDate is String
+        ? DateTime.tryParse(rawAddedDate)
+        : null;
+    final effectiveDate = parsedDate ?? DateTime.utc(2025, 1, 1);
+
+    final rawFormat = json['format'];
+    final BookFormat parsedFormat = rawFormat is Map<String, Object?>
+        ? BookFormat.fromJson(rawFormat)
+        : _inferDefaultFormat(rawId, rawPages.toInt());
+
+    final candidate = Book(
+      id: rawId.trim(),
+      title: rawTitle.trim(),
+      author: rawAuthor.trim(),
+      genre: parsedGenre,
+      year: rawYear.toInt(),
+      pages: rawPages.toInt(),
+      rating: rawRating.toDouble(),
+      isbn: rawIsbn.trim(),
+      addedDate: effectiveDate,
+      format: parsedFormat,
+    );
+
+    final violations = lab1.validateBook((
+      id: candidate.id,
+      title: candidate.title,
+      author: candidate.author,
+      genre: candidate.genre.displayName,
+      year: candidate.year,
+      pages: candidate.pages,
+      rating: candidate.rating,
+      isbn: candidate.isbn,
+      addedDate: candidate.addedDate,
+    ));
+
+    if (violations.isNotEmpty) {
+      throw FormatException(
+        'Порушення бізнес-обмежень полів книги: ${violations.join("; ")}',
+      );
+    }
+
+    return candidate;
+  }
+
+  /// Серіалізує об’єкт [Book] у JSON-сумісний словник `Map<String, Object?>` вручну (Пункт 9).
+  Map<String, Object?> toJson() {
+    return <String, Object?>{
+      'id': id,
+      'title': title,
+      'author': author,
+      'genre': genre.displayName,
+      'year': year,
+      'pages': pages,
+      'rating': rating,
+      'isbn': isbn,
+      'addedDate': addedDate.toCatalogIsoDate(),
+      'format': format.toJson(),
+    };
+  }
 
   @override
   String toString() {

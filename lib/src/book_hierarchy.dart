@@ -21,6 +21,78 @@ sealed class BookFormat {
   /// Поліморфний метод: обчислює орієнтовну фізичну масу примірника в грамах
   /// залежно від кількості сторінок [pages] (`0.0` для суто цифрових видань).
   double estimatePhysicalWeightGrams(int pages);
+
+  /// Перетворює об’єкт формату [BookFormat] на словник для JSON-серіалізації (Пункт 9).
+  Map<String, Object?> toJson() {
+    return switch (this) {
+      PrintedFormat(:final isHardcover, :final paperDensityGrams) =>
+        <String, Object?>{
+          'type': 'printed',
+          'isHardcover': isHardcover,
+          'paperDensityGrams': paperDensityGrams,
+        },
+      EBookFormat(
+        :final fileExtension,
+        :final fileSizeMb,
+        :final hasDrmProtection,
+      ) =>
+        <String, Object?>{
+          'type': 'ebook',
+          'fileExtension': fileExtension,
+          'fileSizeMb': fileSizeMb,
+          'hasDrmProtection': hasDrmProtection,
+        },
+      AudioBookFormat(
+        :final durationMinutes,
+        :final narrator,
+        :final bitrateKbps,
+      ) =>
+        <String, Object?>{
+          'type': 'audiobook',
+          'durationMinutes': durationMinutes,
+          'narrator': narrator,
+          'bitrateKbps': bitrateKbps,
+        },
+      CollectorFormat(
+        :final printRunLimit,
+        :final isSignedByAuthor,
+        :final slipcaseMaterial,
+      ) =>
+        <String, Object?>{
+          'type': 'collector',
+          'printRunLimit': printRunLimit,
+          'isSignedByAuthor': isSignedByAuthor,
+          'slipcaseMaterial': slipcaseMaterial,
+        },
+    };
+  }
+
+  /// Десеріалізує екземпляр [BookFormat] із JSON-словника [json] з явними приведеннями типів (Пункт 9).
+  static BookFormat fromJson(Map<String, Object?> json) {
+    final type = json['type'] as String? ?? 'printed';
+    return switch (type) {
+      'ebook' => EBookFormat(
+        fileExtension: json['fileExtension'] as String? ?? 'EPUB',
+        fileSizeMb: ((json['fileSizeMb'] as num?) ?? 1.0).toDouble(),
+        hasDrmProtection: json['hasDrmProtection'] as bool? ?? false,
+      ),
+      'audiobook' => AudioBookFormat(
+        durationMinutes: ((json['durationMinutes'] as num?) ?? 60).toInt(),
+        narrator: json['narrator'] as String? ?? 'Невідомий диктор',
+        bitrateKbps: ((json['bitrateKbps'] as num?) ?? 192).toInt(),
+      ),
+      'collector' => CollectorFormat(
+        printRunLimit: ((json['printRunLimit'] as num?) ?? 500).toInt(),
+        isSignedByAuthor: json['isSignedByAuthor'] as bool? ?? false,
+        slipcaseMaterial:
+            json['slipcaseMaterial'] as String? ?? 'Шкіряний футляр',
+      ),
+      _ => PrintedFormat(
+        isHardcover: json['isHardcover'] as bool? ?? true,
+        paperDensityGrams: ((json['paperDensityGrams'] as num?) ?? 80).toInt(),
+      ),
+    };
+  }
 }
 
 /// Друковане паперове видання (підтип №1), оголошене через первинний конструктор Dart 3.13.

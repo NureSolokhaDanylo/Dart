@@ -2,7 +2,7 @@
 /// і зіставлення зі зразком з охоронцями `when` (Пункти 4, 9, 11, 12).
 library;
 
-import 'book_catalog.dart' as lab1;
+import 'lab1_functional.dart' as lab1;
 import 'book_hierarchy.dart';
 import 'mixins_and_extensions.dart';
 import 'oop_models.dart';

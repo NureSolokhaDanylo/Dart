@@ -1,11 +1,16 @@
 name: book_catalog
-description: Консольний застосунок для обліку, валідації та агрегації каталогу книг.
+description: Модульний консольний застосунок та HTTP-сервіс для керування каталогом книг.
 version: 1.0.0
 
 environment:
   sdk: ^3.13.2
 
-dependencies: {}
+dependencies:
+  args: ^2.6.0
+  http: ^1.2.2
+  path: ^1.9.1
+  shelf: ^1.4.2
+  shelf_router: ^1.1.4
 
 dev_dependencies:
   lints: ^6.0.0

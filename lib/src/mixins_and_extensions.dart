@@ -2,7 +2,7 @@
 /// для предметної області «Каталог книг» (Пункти 7, 8).
 library;
 
-import 'book_catalog.dart' as lab1;
+import 'lab1_functional.dart' as lab1;
 import 'oop_models.dart';
 
 /// Домішка з обмеженням `on Identifiable`, яка додає поведінку формування
