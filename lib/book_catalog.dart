@@ -6,6 +6,7 @@ library;
 
 export 'src/async_repository.dart';
 export 'src/book_hierarchy.dart';
+export 'src/cli_runner.dart';
 export 'src/isolate_worker.dart';
 export 'src/json_file_storage.dart';
 export 'src/lab1_functional.dart';
