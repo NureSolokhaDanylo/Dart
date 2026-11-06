@@ -2,10 +2,15 @@
 /// потоків виведення `stdout` / `stderr` (Пункти 6, 12).
 library;
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:args/args.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:shelf/shelf.dart' as shelf;
 
+import 'async_repository.dart';
 import 'json_file_storage.dart';
 import 'oop_models.dart';
 import 'open_library_api_client.dart';
@@ -381,4 +386,152 @@ Future<int> executeCatalogCli(
     exitCode = 1;
     return 1;
   }
+}
+
+/// Формує розгорнутий демонстраційний звіт Лабораторної роботи №4:
+/// збереження/читання `books.json` через `p.join`, потокове читання через `openRead()`,
+/// клієнт REST API із 3-рівневою обробкою відмов та HTTP-сервіс `shelf` (Пункти 6–18).
+Future<String> buildLab4ModularReport(List<String> rawCsvLines) async {
+  final buffer = StringBuffer();
+  buffer.writeln(
+    '======================================================================',
+  );
+  buffer.writeln(
+    'ЧАСТИНА IV. МОДУЛЬНИЙ ЗАСТОСУНОК: ФАЙЛИ, МЕРЕЖА, CLI ТА HTTP-СЕРВІС (ЛР №4)',
+  );
+  buffer.writeln(
+    '======================================================================',
+  );
+
+  // 1. Локальне JSON-сховище books.json та p.join (Пункти 7, 9)
+  final seedBooks = parseDefaultCatalogSeedBooks();
+  final savedJsonPath = await saveBooksToJsonFile(seedBooks);
+  final reloadedBooks = await loadBooksFromJsonFile();
+  buffer.writeln();
+  buffer.writeln(
+    '1. Серіалізація JSON (toJson / fromJson) та файлове сховище:',
+  );
+  buffer.writeln('   - Шлях (через p.join): $savedJsonPath');
+  buffer.writeln(
+    '   - Збережено записів: ${seedBooks.length} | Десеріалізовано з диска: ${reloadedBooks.length}',
+  );
+  buffer.writeln(
+    '   - Еквівалентність об’єктів після циклу toJson -> fromJson: '
+    '${seedBooks.first == reloadedBooks.first}',
+  );
+
+  // 2. Потокове читання великого файлу через openRead() -> utf8.decoder -> LineSplitter (Пункт 8)
+  final tempCsvPath = resolveBooksJsonPath(fileName: 'books_stream_demo.csv');
+  await File(tempCsvPath).writeAsString(rawCsvLines.join('\n'), encoding: utf8);
+  final streamReadSummary = await readLargeCatalogFileStreaming(tempCsvPath);
+  await File(tempCsvPath).delete();
+  buffer.writeln();
+  buffer.writeln('2. Потокове читання файлу через File.openRead():');
+  buffer.writeln(
+    '   - Прочитано непорожніх рядків: ${streamReadSummary.totalLinesRead}',
+  );
+  buffer.writeln(
+    '   - Успішно розібрано книг: ${streamReadSummary.validBooksParsed} '
+    '| Пропущено пошкоджених: ${streamReadSummary.invalidLinesSkipped}',
+  );
+
+  // 3. Зовнішній REST API через package:http та 3 рівні відмов (Пункти 10, 11)
+  final mockApiClient = MockClient((http.Request request) async {
+    final payload = <String, Object?>{
+      'numFound': 2,
+      'docs': <Map<String, Object?>>[
+        <String, Object?>{
+          'key': '/works/OL901W',
+          'title': 'Effective Dart: Design and Idioms',
+          'author_name': <String>['Bob Nystrom'],
+          'first_publish_year': 2023,
+          'number_of_pages_median': 340,
+          'ratings_average': 4.9,
+        },
+        <String, Object?>{
+          'key': '/works/OL902W',
+          'title': 'Dart Asynchronous Programming in Depth',
+          'author_name': <String>['Lasse Reichstein Holst Nielsen'],
+          'first_publish_year': 2024,
+          'number_of_pages_median': 410,
+          'ratings_average': 4.8,
+        },
+      ],
+    };
+    return http.Response.bytes(
+      utf8.encode(jsonEncode(payload)),
+      200,
+      headers: const <String, String>{
+        'content-type': 'application/json; charset=utf-8',
+      },
+    );
+  });
+
+  final fetchedBooks = await fetchBooksFromExternalApi(
+    query: 'dart programming',
+    limit: 2,
+    customClient: mockApiClient,
+  );
+  buffer.writeln();
+  buffer.writeln(
+    '3. Обмін із зовнішнім REST API (package:http + 3 рівні відмов):',
+  );
+  for (final apiBook in fetchedBooks) {
+    buffer.writeln(
+      '   - Отримано: [${apiBook.id}] "${apiBook.title}" — ${apiBook.author} '
+      '(${apiBook.year}, ★ ${apiBook.rating})',
+    );
+  }
+
+  // 4. Власний HTTP-сервіс на базі shelf та shelf_router (Пункти 14–17)
+  final middlewareLogs = <String>[];
+  final sharedRepo = AsyncRepository<Book>(
+    readDelay: const Duration(milliseconds: 5),
+    writeDelay: const Duration(milliseconds: 5),
+    initialItems: seedBooks,
+  );
+  final handler = buildCatalogServerHandler(
+    sharedRepo,
+    onLog: middlewareLogs.add,
+  );
+
+  final getFilteredResp = await handler(
+    shelf.Request(
+      'GET',
+      Uri.parse('http://localhost:8080/items?genre=programming&minRating=4.8'),
+    ),
+  );
+  final getSingleOkResp = await handler(
+    shelf.Request('GET', Uri.parse('http://localhost:8080/items/BK-001')),
+  );
+  final getSingle404Resp = await handler(
+    shelf.Request('GET', Uri.parse('http://localhost:8080/items/BK-999')),
+  );
+  final postBad400Resp = await handler(
+    shelf.Request(
+      'POST',
+      Uri.parse('http://localhost:8080/items'),
+      body: '{"id": "BAD"}',
+      headers: jsonUtf8Headers,
+    ),
+  );
+
+  buffer.writeln();
+  buffer.writeln('4. HTTP-сервіс shelf + shelf_router + Middleware:');
+  buffer.writeln(
+    '   - GET /items?genre=programming&minRating=4.8 -> HTTP ${getFilteredResp.statusCode} '
+    '(${getFilteredResp.headers["content-type"]})',
+  );
+  buffer.writeln(
+    '   - GET /items/BK-001 -> HTTP ${getSingleOkResp.statusCode} | '
+    'GET /items/BK-999 -> HTTP ${getSingle404Resp.statusCode}',
+  );
+  buffer.writeln(
+    '   - POST /items (невалідне тіло) -> HTTP ${postBad400Resp.statusCode}',
+  );
+  for (final line in middlewareLogs) {
+    buffer.writeln('   - $line');
+  }
+
+  return buffer.toString();
 }

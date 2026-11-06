@@ -1,0 +1,206 @@
+{
+  "version": 1,
+  "generatedAt": "2026-10-22T00:00:00.000Z",
+  "count": 12,
+  "items": [
+    {
+      "id": "BK-001",
+      "title": "Тигролови",
+      "author": "Іван Багряний",
+      "genre": "Класика",
+      "year": 1944,
+      "pages": 304,
+      "rating": 4.9,
+      "isbn": "978-966-038-840-6",
+      "addedDate": "2025-01-15",
+      "format": {
+        "type": "collector",
+        "printRunLimit": 500,
+        "isSignedByAuthor": true,
+        "slipcaseMaterial": "Тканинний футляр із тисненням"
+      }
+    },
+    {
+      "id": "BK-002",
+      "title": "Місто",
+      "author": "Валер’ян Підмогильний",
+      "genre": "Класика",
+      "year": 1928,
+      "pages": 288,
+      "rating": 4.8,
+      "isbn": "978-617-754-420-2",
+      "addedDate": "2025-02-10",
+      "format": {
+        "type": "printed",
+        "isHardcover": false,
+        "paperDensityGrams": 80
+      }
+    },
+    {
+      "id": "BK-003",
+      "title": "Захар Беркут",
+      "author": "Іван Франко",
+      "genre": "Класика",
+      "year": 1883,
+      "pages": 240,
+      "rating": 4.7,
+      "isbn": "978-966-105-231-3",
+      "addedDate": "2025-03-05",
+      "format": {
+        "type": "printed",
+        "isHardcover": false,
+        "paperDensityGrams": 80
+      }
+    },
+    {
+      "id": "BK-004",
+      "title": "Чистий код",
+      "author": "Роберт Мартін",
+      "genre": "Програмування",
+      "year": 2008,
+      "pages": 464,
+      "rating": 4.8,
+      "isbn": "978-617-095-285-1",
+      "addedDate": "2025-01-20",
+      "format": {
+        "type": "ebook",
+        "fileExtension": "EPUB",
+        "fileSizeMb": 4.8,
+        "hasDrmProtection": false
+      }
+    },
+    {
+      "id": "BK-005",
+      "title": "Прагматичний програміст",
+      "author": "Ендрю Гант",
+      "genre": "Програмування",
+      "year": 2019,
+      "pages": 352,
+      "rating": 4.9,
+      "isbn": "978-966-982-110-2",
+      "addedDate": "2025-04-12",
+      "format": {
+        "type": "ebook",
+        "fileExtension": "EPUB",
+        "fileSizeMb": 4.8,
+        "hasDrmProtection": false
+      }
+    },
+    {
+      "id": "BK-006",
+      "title": "Шаблони проєктування",
+      "author": "Еріх Гамма",
+      "genre": "Програмування",
+      "year": 1994,
+      "pages": 395,
+      "rating": 4.6,
+      "isbn": "978-617-782-109-9",
+      "addedDate": "2025-05-18",
+      "format": {
+        "type": "printed",
+        "isHardcover": true,
+        "paperDensityGrams": 80
+      }
+    },
+    {
+      "id": "BK-007",
+      "title": "Дюна",
+      "author": "Френк Герберт",
+      "genre": "Фантастика",
+      "year": 1965,
+      "pages": 656,
+      "rating": 4.9,
+      "isbn": "978-617-122-554-1",
+      "addedDate": "2025-02-28",
+      "format": {
+        "type": "collector",
+        "printRunLimit": 500,
+        "isSignedByAuthor": true,
+        "slipcaseMaterial": "Тканинний футляр із тисненням"
+      }
+    },
+    {
+      "id": "BK-008",
+      "title": "Фундація",
+      "author": "Айзек Азімов",
+      "genre": "Фантастика",
+      "year": 1951,
+      "pages": 255,
+      "rating": 4.7,
+      "isbn": "978-617-123-890-9",
+      "addedDate": "2025-06-01",
+      "format": {
+        "type": "audiobook",
+        "durationMinutes": 540,
+        "narrator": "Олексій Богданович",
+        "bitrateKbps": 192
+      }
+    },
+    {
+      "id": "BK-009",
+      "title": "Соляріс",
+      "author": "Станіслав Лем",
+      "genre": "Фантастика",
+      "year": 1961,
+      "pages": 288,
+      "rating": 4.6,
+      "isbn": "978-966-148-773-3",
+      "addedDate": "2025-07-14",
+      "format": {
+        "type": "audiobook",
+        "durationMinutes": 540,
+        "narrator": "Олексій Богданович",
+        "bitrateKbps": 192
+      }
+    },
+    {
+      "id": "BK-010",
+      "title": "Брама Європи",
+      "author": "Сергій Плохій",
+      "genre": "Історія",
+      "year": 2015,
+      "pages": 496,
+      "rating": 4.9,
+      "isbn": "978-617-120-220-7",
+      "addedDate": "2025-03-22",
+      "format": {
+        "type": "printed",
+        "isHardcover": true,
+        "paperDensityGrams": 80
+      }
+    },
+    {
+      "id": "BK-011",
+      "title": "Історія України-Руси",
+      "author": "Михайло Грушевський",
+      "genre": "Історія",
+      "year": 1898,
+      "pages": 640,
+      "rating": 4.8,
+      "isbn": "978-966-001-318-6",
+      "addedDate": "2025-08-09",
+      "format": {
+        "type": "collector",
+        "printRunLimit": 500,
+        "isSignedByAuthor": true,
+        "slipcaseMaterial": "Тканинний футляр із тисненням"
+      }
+    },
+    {
+      "id": "BK-012",
+      "title": "Подолати минуле",
+      "author": "Ярослав Грицак",
+      "genre": "Історія",
+      "year": 2021,
+      "pages": 432,
+      "rating": 4.7,
+      "isbn": "978-617-796-599-1",
+      "addedDate": "2025-09-19",
+      "format": {
+        "type": "printed",
+        "isHardcover": true,
+        "paperDensityGrams": 80
+      }
+    }
+  ]
+}
