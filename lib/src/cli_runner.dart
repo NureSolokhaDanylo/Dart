@@ -9,6 +9,7 @@ import 'package:args/args.dart';
 import 'json_file_storage.dart';
 import 'oop_models.dart';
 import 'open_library_api_client.dart';
+import 'shelf_server.dart';
 
 /// Розпізнана конфігурація запуску консольного застосунку (Пункт 6).
 class CliInvocationConfig {
@@ -351,6 +352,21 @@ Future<int> executeCatalogCli(
         for (final book in apiBooks) {
           out.writeln('  * [${book.id}] "${book.title}" — ${book.author}');
         }
+        exitCode = 0;
+        return 0;
+
+      case 'serve':
+        final repo = await createSharedCatalogRepository(
+          fileName: config.filePath,
+        );
+        final server = await startCatalogHttpServer(
+          repo,
+          port: config.port,
+          persistFileName: config.filePath,
+        );
+        out.writeln(
+          '[CLI SERVE] HTTP-сервіс запущено на http://${server.address.host}:${server.port}',
+        );
         exitCode = 0;
         return 0;
 

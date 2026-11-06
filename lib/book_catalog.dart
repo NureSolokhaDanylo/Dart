@@ -14,4 +14,5 @@ export 'src/mixins_and_extensions.dart';
 export 'src/oop_models.dart';
 export 'src/open_library_api_client.dart';
 export 'src/repository_and_patterns.dart';
+export 'src/shelf_server.dart';
 export 'src/stream_processor.dart';
